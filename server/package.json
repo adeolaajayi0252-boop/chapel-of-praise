@@ -1,0 +1,12 @@
+{
+  "name": "chapel-of-praise-final",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Zero-dependency Node.js server for the RCCG Chapel of Praise app. No npm install required — run with `node server.js`.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node ../tests/smoke-check.mjs"
+  },
+  "dependencies": {}
+}

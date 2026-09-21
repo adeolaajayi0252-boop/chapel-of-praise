@@ -132,102 +132,39 @@ function setTab(t) {
 }
 
 // ---------- Home ----------
-function home() {
-  const notices = state.notifications;
-  app.innerHTML = `<div class="wrap">
-    <section class="hero">
-      <div class="eyebrow">The Redeemed Christian Church of God</div>
-      <h1>Chapel of Praise, Ibadan</h1>
-      <p>One church experience for worship, calendar, media, communication, giving, requests and ministry connection.</p>
-      <img src="assets/church.jpg" alt="Chapel of Praise">
-    </section>
-    <div class="grid">
-      ${card('Today', `<p class="muted">Your church schedule and reminders are brought together here.</p><button class="primary" onclick="setTab('calendar')">Open Calendar</button>`)}
-      ${card('Announcements', `<p>${notices.length} announcement${notices.length === 1 ? '' : 's'} for you right now.</p><button class="ghost" onclick="setTab('connect')">Open Notifications</button>`)}
-      ${card('Account', state.user
-        ? `<p>Signed in as <b>${esc(state.user.name)}</b><br><span class="pill">${esc(state.user.role)}</span></p><button class="ghost" onclick="logout()">Log out</button>`
-        : `<p class="muted">Sign in to save reminders, submit requests and use giving.</p><button class="primary" onclick="openAuth('login')">Log in</button> <button class="ghost" onclick="openAuth('register')">Create account</button>`)}
-      ${card('Sunday Priority', `<div class="event" style="padding:10px"><b>Sunday Service</b><div>9:00 AM – 12:00 PM</div><span class="pill">HIGHEST PRIORITY</span></div>`)}
-    </div>
-    <div class="grid" style="margin-top:12px">
-      ${card('Quick Actions', `<div class="list"><button class="ghost" onclick="setTab('media')">Sermons & Media</button><button class="ghost" onclick="setTab('connect')">Prayer / Church Requests</button><button class="ghost" onclick="setTab('college')">RCTC College</button></div>`)}
-      ${card('Church Location', `<p class="muted">${esc(CONFIG_LOCATION)}</p><a class="primary" style="display:inline-block;text-decoration:none" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONFIG_LOCATION)}">Directions</a>`)}
-    </div>
-  </div>`;
+function getNextService(){
+  const now=new Date(); let best=null,bestMs=Infinity;
+  for(const e of state.calendar){const target=new Date(now);const delta=(e.day-now.getDay()+7)%7;const [hh,mm]=(e.start||'09:00').split(':').map(Number);target.setDate(now.getDate()+delta);target.setHours(hh||0,mm||0,0,0);if(target<=now)target.setDate(target.getDate()+7);const ms=target-now;if(ms<bestMs){best={...e,target};bestMs=ms;}}
+  if(!best){const target=new Date(now);target.setDate(now.getDate()+((7-now.getDay())%7));target.setHours(9,0,0,0);if(target<=now)target.setDate(target.getDate()+7);best={title:'Sunday Service',start:'09:00',target};}
+  return best;
+}
+function formatCountdown(ms){ms=Math.max(0,ms);const sec=Math.floor(ms/1000);return{days:Math.floor(sec/86400),hours:Math.floor(sec%86400/3600),mins:Math.floor(sec%3600/60),secs:sec%60};}
+function updateCountdown(target){const draw=()=>{const c=document.querySelector('#countdown');if(!c)return;const t=formatCountdown(target-new Date());c.innerHTML=[['days','Days'],['hours','Hours'],['mins','Mins'],['secs','Secs']].map(([k,l])=>`<div class="time-box"><strong>${String(t[k]).padStart(2,'0')}</strong><span>${l}</span></div>`).join('');};draw();clearInterval(window.copCountdown);window.copCountdown=setInterval(draw,1000);}
+function home(){
+ const notices=state.notifications||[],next=getNextService(),notice=notices[0];
+ app.innerHTML=`<div class="wrap">
+  <section class="hero hero-home"><div class="eyebrow">Chapel of Praise · Ibadan</div><h1>Together in Worship<em>Together in His Presence</em></h1><p>A place to belong, grow and make a difference.</p><img src="assets/church.jpg" alt="Chapel of Praise"><div class="hero-dots"><span class="active"></span><span></span><span></span></div></section>
+  <section class="next-service"><div class="next-service-head"><div class="service-icon">▣</div><div><h3>Next Service</h3><p>${esc(next.title)} · Worship · Word · Fellowship</p></div><div class="arrow">›</div></div><div class="countdown" id="countdown"></div></section>
+  <div class="quick-grid"><button class="quick" onclick="setTab('connect')"><span class="quick-icon">♧</span><small>Prayer</small></button><button class="quick" onclick="setTab('media')"><span class="quick-icon">▶</span><small>Sermons</small></button><button class="quick" onclick="toast('Bible resources will appear here as they are connected.')"><span class="quick-icon">▤</span><small>Bible</small></button><button class="quick" onclick="startGiving()"><span class="quick-icon">♥</span><small>Giving</small></button></div>
+  <div class="section-head"><h2>Announcements</h2><button onclick="setTab('connect')">See all</button></div>
+  <section class="card announcement">${notice?`<img src="assets/church.jpg" alt="Announcement"><div><h3>${esc(notice.title||'Be Part of Our Church Family')}</h3><p>${esc(notice.message||notice.body||'Join us for a time of fellowship, prayer and the Word.')}</p></div>`:`<img src="assets/church.jpg" alt="Chapel of Praise"><div><h3>Be Part of Our Church Family</h3><p>Join us for worship, prayer, fellowship and the Word.</p></div>`}<div class="arrow">›</div></section>
+  <div class="section-head"><h2>Explore Chapel of Praise</h2></div><div class="more-list"><button class="more-item" onclick="setTab('calendar')"><span class="mi">▣</span><span><b>Church Events</b><small>Services, meetings and programmes</small></span><span class="arrow">›</span></button><button class="more-item" onclick="setTab('college')"><span class="mi">▤</span><span><b>RCTC Bible College</b><small>Official college portal</small></span><span class="arrow">›</span></button><button class="more-item" onclick="setTab('profile')"><span class="mi">♙</span><span><b>My Profile</b><small>${state.user?'Manage your account':'Sign in or create an account'}</small></span><span class="arrow">›</span></button></div>
+ </div>`;updateCountdown(next.target);
 }
 
-const CONFIG_LOCATION = 'Behind NNPC Filling Station, Adegbayi Area, Off Alakia, Ibadan, Oyo State, Nigeria';
+const CONFIG_LOCATION='Behind NNPC Filling Station, Adegbayi Area, Off Alakia, Ibadan, Oyo State, Nigeria';
 
 // ---------- Calendar ----------
-function calendarPage() {
-  app.innerHTML = `<div class="wrap">
-    <section class="hero"><div class="eyebrow">Stage 3</div><h1>Church Calendar</h1><p>Services, meetings, prayers and role-aware reminders.</p></section>
-    <div class="list">${state.calendar.map(e => `
-      <section class="card event">
-        <div class="row"><div><h3>${esc(e.title)}</h3><span class="muted">Every ${DAY_NAMES[e.day]} · ${esc(e.start)}–${esc(e.end)}</span></div><span class="pill">${esc((e.priority || '').toUpperCase())}</span></div>
-        <button class="ghost" data-action="remind" data-id="${esc(e.id)}">${state.user ? 'Remind me' : 'Log in to save reminder'}</button>
-      </section>`).join('') || '<div class="card muted">No calendar events yet.</div>'}
-    </div>
-  </div>`;
-}
-
-async function remind(eventId) {
-  if (!state.user) { openAuth('login'); return; }
-  try {
-    await api('/reminders', { method: 'POST', body: JSON.stringify({ eventId }) });
-    toast('Reminder saved to your account');
-  } catch (e) { toast(e.message); }
-}
+function calendarPage(){app.innerHTML=`<div class="wrap"><div class="page-title"><button class="back" onclick="setTab('home')">‹</button><h1>Events</h1></div><div class="tabs"><button class="active">Upcoming</button><button>Past</button><button>All</button></div><div class="list">${state.calendar.map(e=>`<section class="list-row event"><div class="thumb" style="display:grid;place-items:center;font-size:25px;color:var(--brand)">▣</div><div style="flex:1"><h3>${esc(e.title)}</h3><p>${DAY_NAMES[e.day]} · ${esc(e.start)}–${esc(e.end)}</p></div><button class="arrow" data-action="remind" data-id="${esc(e.id)}">›</button></section>`).join('')||'<div class="card muted">No calendar events yet.</div>'}</div></div>`;}
+async function remind(eventId){if(!state.user){openAuth('login');return;}try{await api('/reminders',{method:'POST',body:JSON.stringify({eventId})});toast('Reminder saved to your account');}catch(e){toast(e.message);}}
 
 // ---------- Media ----------
-function mediaPage() {
-  const m = state.media;
-  app.innerHTML = `<div class="wrap">
-    <section class="hero"><div class="eyebrow">Stage 4</div><h1>Media & Sermons</h1><p>Approved sermons, worship resources and livestream entry points.</p>
-      <button class="primary" onclick="watchLive()">Watch Live</button></section>
-    <div class="list">${(m.items || []).map(x => `
-      <section class="card">
-        <span class="pill">${esc(x.type || 'media')}</span>
-        <h3>${esc(x.title)}</h3>
-        <p class="muted">${esc(x.theme || x.speaker || '')} ${x.scripture ? '· ' + esc(x.scripture) : ''} ${x.date ? '· ' + esc(x.date) : ''}</p>
-        ${x.url ? `<button class="primary" data-action="play-media" data-url="${esc(x.url)}">Play</button>` : '<p class="muted">Recording URL will be supplied by the approved media team.</p>'}
-        <button class="ghost" data-action="save-media" data-id="${esc(x.id)}">${state.saved.includes(x.id) ? 'Saved' : 'Save'}</button>
-      </section>`).join('') || '<div class="card muted">No media items yet.</div>'}
-    </div>
-  </div>`;
-}
-
-function saveMedia(id) {
-  if (!state.saved.includes(id)) state.saved.push(id);
-  persist();
-  toast('Media saved on this device');
-  render();
-}
-
-function watchLive() {
-  if (state.media.livestreamUrl) window.open(state.media.livestreamUrl, '_blank');
-  else toast('Livestream destination is awaiting the church-approved URL.');
-}
+function mediaPage(){const m=state.media;app.innerHTML=`<div class="wrap"><div class="page-title"><button class="back" onclick="setTab('home')">‹</button><h1>Sermons</h1></div><div class="tabs"><button class="active">Latest</button><button>Popular</button><button>Categories</button></div><section class="hero" style="margin-bottom:13px"><div class="eyebrow">Grow spiritually</div><h1 style="font-size:28px">The Word for every season</h1><p>Listen to approved sermons, teachings and worship resources.</p><button class="primary" onclick="watchLive()">Watch Live</button></section><div class="list">${(m.items||[]).map(x=>`<section class="list-row"><div class="thumb" style="display:grid;place-items:center;background:var(--brand);color:#fff;font-size:24px">▶</div><div style="flex:1"><h3>${esc(x.title)}</h3><p>${esc(x.theme||x.speaker||'Sunday Service')} ${x.scripture?'· '+esc(x.scripture):''}</p>${x.url?`<small class="pill">${esc(x.type||'Media')}</small>`:''}</div><button class="arrow" data-action="play-media" data-url="${esc(x.url||'')}">›</button></section>`).join('')||'<div class="card muted">No media items yet.</div>'}</div></div>`;}
+function saveMedia(id){if(!state.saved.includes(id))state.saved.push(id);persist();toast('Media saved on this device');render();}
+function watchLive(){if(state.media.livestreamUrl)window.open(state.media.livestreamUrl,'_blank');else toast('Livestream destination is awaiting the church-approved URL.');}
 
 // ---------- Connect (auth, prayer/service requests, giving, notifications) ----------
-function connect() {
-  if (!state.user) {
-    app.innerHTML = `<div class="wrap">
-      <section class="hero"><div class="eyebrow">Connect & Serve</div><h1>Sign in required</h1><p>Prayer requests, church service requests, giving and reminders require an account so the church can follow up with you.</p>
-      <button class="primary" onclick="openAuth('login')">Log in</button> <button class="ghost" onclick="openAuth('register')">Create account</button></section>
-    </div>`;
-    return;
-  }
-  app.innerHTML = `<div class="wrap">
-    <section class="hero"><div class="eyebrow">Stage 5 + Stage 6</div><h1>Connect & Serve</h1><p>Communication, prayer and church service requests in one member area.</p></section>
-    <div class="grid">
-      ${card('Prayer Request', `<form class="form" onsubmit="submitRequest(event,'Prayer Request')"><textarea name="message" rows="4" placeholder="Share your prayer request" required></textarea><label><input type="checkbox" name="private" checked> Keep this request private</label><button class="primary">Submit Prayer Request</button></form>`)}
-      ${card('Church Service Request', `<form class="form" onsubmit="submitRequest(event,'Church Service Request')"><select name="requestType"><option>Pastoral Follow-up</option><option>Counselling</option><option>Home Visit</option><option>Welfare Assistance</option><option>Other</option></select><textarea name="message" rows="3" placeholder="Tell the church what you need" required></textarea><button class="primary">Submit Request</button></form>`)}
-      ${card('Giving', givingBody())}
-      ${card('Your Requests', requestHistoryBody())}
-    </div>
-  </div>`;
-}
+function connect(){if(!state.user){app.innerHTML=`<div class="wrap"><div class="page-title"><button class="back" onclick="setTab('home')">‹</button><h1>Prayer</h1></div><section class="hero"><div class="eyebrow">Let's Pray Together</div><h1 style="font-size:30px">Share your prayer needs</h1><p>Join others in faith and stay connected with the Chapel of Praise family.</p></section><div class="more-list"><button class="more-item" onclick="openAuth('login')"><span class="mi">♧</span><span><b>Submit a Prayer Request</b><small>Sign in to share your prayer need</small></span><span class="arrow">›</span></button><button class="more-item" onclick="openAuth('register')"><span class="mi">♙</span><span><b>Create an Account</b><small>Save reminders and follow up requests</small></span><span class="arrow">›</span></button></div></div>`;return;}app.innerHTML=`<div class="wrap"><div class="page-title"><button class="back" onclick="setTab('home')">‹</button><h1>Prayer</h1></div><section class="hero"><div class="eyebrow">Let's Pray Together</div><h1 style="font-size:30px">Share your prayer needs</h1><p>Our church family is here to pray with you.</p></section><div class="grid">${card('Submit a Request',`<form class="form" onsubmit="submitRequest(event,'Prayer Request')"><textarea name="message" rows="4" placeholder="Share your prayer request" required></textarea><label><input type="checkbox" name="private" checked> Keep this request private</label><button class="primary">Submit Prayer Request</button></form>`)}${card('Prayer Wall',`<p class="muted">View and pray for others through approved church requests.</p><button class="ghost" onclick="toast('Prayer wall is ready for approved requests.')">Open Prayer Wall</button>`)}${card('Giving',givingBody())}${card('Your Requests',requestHistoryBody())}</div></div>`;}
 
 function givingBody() {
   const accts = state.givingAccounts;
@@ -277,36 +214,10 @@ async function enablePush() {
 }
 
 // ---------- RCTC ----------
-function college() {
-  const collegeUrl = 'https://www.rcbc.edu.ng/';
-  app.innerHTML = `<div class="wrap">
-    <section class="hero"><div class="eyebrow">Stage 7 · Official external source</div><h1>The Redeemed Christian Theological College (RCTC)</h1>
-      <p>Connect directly to the official college portal for programmes, admissions, applications and college information. Chapel of Praise administrators do not maintain this content.</p>
-      <a class="primary" style="display:inline-block;text-decoration:none" target="_blank" rel="noopener" href="${collegeUrl}">Open Official RCTC Portal</a></section>
-    <div class="grid">
-      ${card('College Portal', `<p class="muted">The official portal currently resolves at the legacy <b>rcbc.edu.ng</b> domain while the institution has adopted the RCTC name.</p><a class="ghost" style="display:inline-block;text-decoration:none" target="_blank" rel="noopener" href="${collegeUrl}">Visit Portal</a>`)}
-      ${card('What you can access', `<ul><li>Schools and programmes</li><li>Theology and pastoral ministry programmes</li><li>Admissions/application entry points</li><li>Official college information</li><li>College updates maintained by RCTC</li></ul>`)}
-      ${card('Content ownership', `<p class="muted">College information is externally sourced. Church admins can control the link and integration settings, but should not edit RCTC academic content inside the Chapel of Praise CMS.</p>`)}
-    </div>
-  </div>`;
-}
+function college(){const collegeUrl='https://www.rcbc.edu.ng/';app.innerHTML=`<div class="wrap"><div class="page-title"><button class="back" onclick="setTab('profile')">‹</button><h1>RCTC</h1></div><section class="card rctc-card"><img class="rctc-logo" src="assets/rctc-logo.jpg" alt="The Redeemed Christian Bible College logo"><div><span class="pill">Official college portal</span><h3>The Redeemed Christian Theological College</h3><p class="muted">Formerly Redeemed Christian Bible College (RCBC).</p></div></section><section class="hero" style="margin-top:13px"><div class="eyebrow">Bible College</div><h1 style="font-size:29px">Grow in the Word</h1><p>Connect to the official RCTC portal for programmes, admissions, applications and college information.</p><a class="primary" style="display:inline-block;text-decoration:none" target="_blank" rel="noopener" href="${collegeUrl}">Open Official RCTC Portal</a></section><div class="grid">${card('What you can access',`<p class="muted">Schools and programmes · Theology and pastoral ministry · Admissions and applications · Official college information.</p>`)}${card('Content ownership',`<p class="muted">College information is externally sourced. Chapel of Praise administrators do not maintain RCTC academic content inside the church CMS.</p>`)}</div></div>`;}
 
 // ---------- Profile ----------
-function profile() {
-  if (!state.user) {
-    app.innerHTML = `<div class="wrap"><section class="hero"><div class="eyebrow">Profile</div><h1>Sign in</h1><p>Create an account or log in to view your profile.</p>
-      <button class="primary" onclick="openAuth('login')">Log in</button> <button class="ghost" onclick="openAuth('register')">Create account</button></section></div>`;
-    return;
-  }
-  app.innerHTML = `<div class="wrap">
-    <section class="hero"><div class="eyebrow">Member experience</div><h1>Profile & Access</h1><p>Your role determines what restricted church information is displayed to you.</p></section>
-    ${card('Account', `<p><b>${esc(state.user.name)}</b><br>${esc(state.user.email)}</p><p class="muted">Role: <span class="pill">${esc(state.user.role)}</span></p><p class="muted">Role changes are made by a church admin — this is no longer a self-service setting.</p><button class="ghost" onclick="logout()">Log out</button>`)}
-    <div class="grid" style="margin-top:12px">
-      ${card('Departments', `<p>Prayer · Choir · Media · Ushering/Protocol · Welfare/Visitation · Sanitation · Children/DTCE</p>`)}
-      ${card('Leadership', state.leadership.map(l => `${esc(l.role)}: ${esc(l.name)}`).join('<br>') || '<p class="muted">Not yet configured.</p>')}
-    </div>
-  </div>`;
-}
+function profile(){app.innerHTML=`<div class="wrap"><div class="page-title"><h1>More</h1></div><div class="more-list"><button class="more-item" onclick="${state.user?"toast('Profile details are shown below.')":"openAuth('login')"}"><span class="mi">♙</span><span><b>My Profile</b><small>${state.user?esc(state.user.name):'Sign in and manage your account'}</small></span><span class="arrow">›</span></button><button class="more-item" onclick="setTab('college')"><span class="mi">▤</span><span><b>RCTC Bible College</b><small>Programmes, admissions and official portal</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Announcements are shown on Home.')"><span class="mi">♢</span><span><b>Announcements</b><small>Latest church news and updates</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Gallery is ready for approved church photos and videos.')"><span class="mi">▧</span><span><b>Gallery</b><small>Photos and videos</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Bible resources will appear here as they are connected.')"><span class="mi">▤</span><span><b>Bible</b><small>Read, study and grow</small></span><span class="arrow">›</span></button><button class="more-item" onclick="startGiving()"><span class="mi">♥</span><span><b>Giving</b><small>Tithe, offering and more</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('App preferences are managed by your device and church configuration.')"><span class="mi">⚙</span><span><b>Settings</b><small>App preferences</small></span><span class="arrow">›</span></button></div>${state.user?`<section class="card" style="margin-top:12px"><h3>Account</h3><p><b>${esc(state.user.name)}</b><br>${esc(state.user.email)}</p><p class="muted">Role: <span class="pill">${esc(state.user.role)}</span></p><button class="ghost" onclick="logout()">Log out</button></section>`:''}</div>`;}
 
 async function logout() {
   state.token = null;
@@ -387,6 +298,8 @@ function adminPage() {
 function renderAdminPage() {
   app.innerHTML = `<div class="wrap">
     <section class="hero"><div class="eyebrow">Stage 7 · Admin</div><h1>Admin Panel</h1><p>Manage members, requests, sermons, events, notifications and giving accounts.</p></section>
+
+    ${card('Content Management Centre', `<div class="quick-grid"><button class="quick" onclick="toast('Events manager ready for connection')"><span class="quick-icon">▣</span><small>Events</small></button><button class="quick" onclick="toast('Announcements manager ready for connection')"><span class="quick-icon">!</span><small>Announcements</small></button><button class="quick" onclick="toast('Homepage controls ready for connection')"><span class="quick-icon">⌂</span><small>Homepage</small></button><button class="quick" onclick="toast('RCTC controls ready for connection')"><span class="quick-icon">▤</span><small>RCTC</small></button></div>`)}
 
     ${card('Add a sermon / media item', `<form class="form" onsubmit="adminAddMedia(event)">
       <input name="title" placeholder="Title" required>
@@ -500,7 +413,7 @@ app.addEventListener('click', (ev) => {
   if (!el) return;
   const action = el.dataset.action;
   if (action === 'remind') remind(el.dataset.id);
-  else if (action === 'play-media') window.open(el.dataset.url, '_blank');
+  else if (action === 'play-media') { if (el.dataset.url) window.open(el.dataset.url, '_blank'); else toast('This sermon does not have a recording URL yet.'); }
   else if (action === 'save-media') saveMedia(el.dataset.id);
 });
 app.addEventListener('change', (ev) => {

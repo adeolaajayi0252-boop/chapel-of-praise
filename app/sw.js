@@ -5,7 +5,7 @@
 // and be readable by anything with access to it. All API calls always go
 // straight to the network.
 const CACHE = 'cop-final-v2';
-const CORE = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './assets/rccg-logo.jpg', './assets/icon-192.png', './assets/icon-512.png'];
+const CORE = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './assets/rccg-logo.jpg', './assets/rctc-logo.jpg', './assets/icon-192.png', './assets/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)));

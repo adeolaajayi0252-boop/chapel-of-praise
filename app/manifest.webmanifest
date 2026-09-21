@@ -3,8 +3,8 @@
   "short_name": "Chapel of Praise",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f7f5f2",
-  "theme_color": "#7a1320",
+  "background_color": "#f8faf9",
+  "theme_color": "#005c47",
   "description": "RCCG Chapel of Praise, Ibadan — church calendar, sermons, prayer requests and giving.",
   "icons": [
     { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

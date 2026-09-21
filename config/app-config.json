@@ -1,0 +1,22 @@
+{
+  "appName":"RCCG Chapel of Praise",
+  "church":"The Redeemed Christian Church of God (RCCG), Chapel of Praise, Ibadan",
+  "location":"Behind NNPC Filling Station, Adegbayi Area, Off Alakia, Ibadan, Oyo State, Nigeria",
+  "timezone":"Africa/Lagos",
+  "college":{
+    "name":"The Redeemed Christian Theological College (RCTC)",
+    "formerName":"Redeemed Christian Bible College (RCBC)",
+    "officialSite":"https://www.rcbc.edu.ng/",
+    "sourceLabel":"Official college portal; currently branded with the former RCBC name on the domain"
+  },
+  "leadership":[
+    {"role":"Area Pastor","name":"Felix Akintunde","status":"Presiding"},
+    {"role":"Parish Pastor","name":"Aderemi Ajayi","status":"Pastor"},
+    {"role":"Pastor's Wife","name":"Mrs Felix Akintunde","status":"Wife"},
+    {"role":"Pastor's Wife","name":"Mrs Aderemi Ajayi","status":"Wife"},
+    {"role":"Deacons/Deaconess","name":"TBI","status":"To be identified"},
+    {"role":"Workers","name":"TBI","status":"To be identified"},
+    {"role":"Members","name":"TBI","status":"To be identified"}
+  ],
+  "departments":["Prayer","Choir","Media","Ushering/Protocol","Welfare/Visitation","Sanitation","Children/DTCE"]
+}

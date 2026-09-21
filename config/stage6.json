@@ -1,0 +1,5 @@
+{
+ "giving":{"enabled":true,"provider":"configure-in-stage-7-production","categories":["Tithe","Offering","Thanksgiving","Missions","Building/Project","Welfare","Other"]},
+ "prayerRequests":{"enabled":true,"privateByDefault":true},
+ "serviceRequests":{"enabled":true,"types":["Pastoral Follow-up","Counselling","Home Visit","Welfare Assistance","Other"]}
+}

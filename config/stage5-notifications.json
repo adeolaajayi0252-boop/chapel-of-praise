@@ -1,0 +1,11 @@
+{
+ "channels":["in-app","web-push","email","sms"],
+ "templates":[
+  {"id":"daily-message","title":"Daily Bible Message","audience":"all"},
+  {"id":"service-reminder","title":"Service Reminder","audience":"role-aware"},
+  {"id":"media-new","title":"New Sermon or Media","audience":"all"},
+  {"id":"announcement","title":"Church Announcement","audience":"role-aware"},
+  {"id":"choir","title":"Choir Reminder","audience":"choir"},
+  {"id":"workers-online","title":"Ministers & Workers Online Meeting","audience":"worker-minister"}
+ ]
+}

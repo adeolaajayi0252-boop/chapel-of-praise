@@ -95,7 +95,11 @@ export async function readDB() {
     cache = fresh;
     return fresh;
   }
-  cache = rows[0].data;
+  // Merge onto defaultData() so any missing top-level fields (e.g. if the
+  // row was pre-created with empty '{}' data, or an older shape) get
+  // filled in rather than causing "Cannot read properties of undefined"
+  // errors elsewhere in the app.
+  cache = { ...defaultData(), ...(rows[0].data || {}) };
   return cache;
 }
 

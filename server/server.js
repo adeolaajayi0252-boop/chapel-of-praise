@@ -37,6 +37,19 @@ function randomPassword() {
 
 function bootstrap() {
   update(db => {
+    // Normalize persisted data so an older/incomplete db.json cannot crash startup.
+    if (!Array.isArray(db.users)) db.users = [];
+    if (!Array.isArray(db.requests)) db.requests = [];
+    if (!Array.isArray(db.reminders)) db.reminders = [];
+    if (!Array.isArray(db.media)) db.media = [];
+    if (!Array.isArray(db.events)) db.events = [];
+    if (!Array.isArray(db.notifications)) db.notifications = [];
+    if (!db.givingAccounts || typeof db.givingAccounts !== 'object') {
+      db.givingAccounts = { accounts: [], note: 'Account details have not been added yet.' };
+    }
+    if (!Array.isArray(db.givingAccounts.accounts)) db.givingAccounts.accounts = [];
+    if (!db.leadership || typeof db.leadership !== 'object') db.leadership = {};
+
     if (db.media.length === 0) {
       try {
         const m = readConfig('media.json');

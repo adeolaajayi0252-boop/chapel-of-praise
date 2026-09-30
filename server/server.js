@@ -1,20 +1,17 @@
 // RCCG Chapel of Praise — application server.
 //
-// Built on Node's built-in `http` and `fetch` only (no express, no cors,
-// no database driver package) — authored and tested in an offline sandbox
-// with no package registry access, and also just a legitimate way to run
-// a small app with minimal moving parts. Persistent storage lives in a
-// Supabase Postgres project, accessed over its REST API (see db.js) —
-// this matters because Render's free web service tier has no persistent
-// disk, so anything written to the local filesystem is lost on every
-// restart. See docs/DEPLOYMENT.md for the required Supabase setup and
-// environment variables.
+// Deliberately built on Node's built-in `http` module only (no express,
+// no cors package) because this server is authored and tested in an
+// offline sandbox with no package registry access. It is a normal,
+// legitimate way to run a small Node app and needs zero `npm install`
+// step to run — copy the folder, run `node server.js`, done. If you'd
+// rather use express later, this file is small enough to port.
 
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readDB, update, nextId, storageConfigured } from './db.js';
+import { readDB, update, nextId } from './db.js';
 import { hashPassword, verifyPassword, signToken, verifyToken, getBearerToken } from './auth.js';
 import { activeProvider, createCheckoutSession, verifyTransaction, verifyWebhookSignature } from './payments.js';
 
@@ -38,32 +35,26 @@ function randomPassword() {
   return out;
 }
 
-async function bootstrap() {
-  if (!storageConfigured()) {
-    console.log('========================================================');
-    console.log('WARNING: SUPABASE_URL / SUPABASE_SERVICE_KEY are not set.');
-    console.log('The server will start, but every request that needs to');
-    console.log('read or write data will fail until these are configured.');
-    console.log('See docs/DEPLOYMENT.md for setup steps.');
-    console.log('========================================================');
-    return;
-  }
-
-  await update(db => {
-    if (!db.media || db.media.length === 0) {
+function bootstrap() {
+  update(db => {
+    if (db.media.length === 0) {
       try {
         const m = readConfig('media.json');
         db.media = Array.isArray(m) ? m : (m.items || []);
         if (!db.livestreamUrl && m.livestreamUrl) db.livestreamUrl = m.livestreamUrl;
-      } catch { db.media = db.media || []; }
+      } catch { db.media = []; }
     }
     if (db.livestreamUrl === undefined) db.livestreamUrl = '';
-    if (!db.events || db.events.length === 0) {
+    if (db.events.length === 0) {
       try {
         const cal = readConfig('calendar.json');
         const raw = Array.isArray(cal) ? cal : (cal.events || []);
+        // calendar.json uses "audience"; normalise to "aud" for the app.
         db.events = raw.map(e => ({ ...e, aud: e.aud || e.audience || ['all'] }));
-      } catch { db.events = db.events || []; }
+      } catch { db.events = []; }
+    }
+    if ((!db.leadership || db.leadership.deacons === 'TBI') === false) {
+      // leadership already customised by an admin — leave it alone
     }
     if (!db._leadershipSeeded) {
       try {
@@ -77,13 +68,13 @@ async function bootstrap() {
     return db;
   });
 
-  const db = await readDB();
-  const hasAdmin = (db.users || []).some(u => u.role === 'admin');
+  const db = readDB();
+  const hasAdmin = db.users.some(u => u.role === 'admin');
   if (!hasAdmin) {
     const email = process.env.ADMIN_EMAIL || 'admin@chapelofpraise.local';
     const password = process.env.ADMIN_PASSWORD || randomPassword();
     const { salt, hash } = hashPassword(password);
-    await update(db2 => {
+    update(db2 => {
       db2.users.push({
         id: nextId(), name: 'Administrator', email, salt, hash,
         role: 'admin', createdAt: new Date().toISOString()
@@ -96,10 +87,12 @@ async function bootstrap() {
     console.log('Admin email   :', email);
     if (usedGenerated) {
       console.log('Admin password:', password, '(auto-generated — log in and change it, or set ADMIN_EMAIL/ADMIN_PASSWORD env vars before first run instead)');
+      const credFile = path.join(__dirname, 'data', 'admin-credentials.txt');
+      fs.writeFileSync(credFile, `email: ${email}\npassword: ${password}\nGenerated: ${new Date().toISOString()}\nDelete this file after you have logged in and saved these credentials somewhere safe.\n`);
+      console.log('(also written to server/data/admin-credentials.txt — delete that file after noting the password)');
     } else {
       console.log('Admin password: (taken from ADMIN_PASSWORD env var)');
     }
-    console.log('This account is stored in Supabase, so it will persist across restarts.');
     console.log('========================================================');
   }
 }
@@ -134,24 +127,24 @@ function readBody(req) {
   });
 }
 
-async function currentUser(req) {
+function currentUser(req) {
   const token = getBearerToken(req);
   const payload = token ? verifyToken(token) : null;
   if (!payload) return null;
-  const db = await readDB();
+  const db = readDB();
   const user = db.users.find(u => u.id === payload.uid);
   if (!user) return null;
   return { id: user.id, name: user.name, email: user.email, role: user.role };
 }
 
-async function requireAuth(req, res) {
-  const user = await currentUser(req);
+function requireAuth(req, res) {
+  const user = currentUser(req);
   if (!user) { send(res, 401, { error: 'Authentication required' }); return null; }
   return user;
 }
 
-async function requireAdmin(req, res) {
-  const user = await requireAuth(req, res);
+function requireAdmin(req, res) {
+  const user = requireAuth(req, res);
   if (!user) return null;
   if (user.role !== 'admin') { send(res, 403, { error: 'Admin access required' }); return null; }
   return user;
@@ -160,7 +153,10 @@ async function requireAdmin(req, res) {
 function isValidEmail(e) { return typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
 
 // ---------- simple in-memory rate limiting for auth endpoints ----------
-const rateBuckets = new Map();
+// Not a substitute for a real rate-limiting layer (e.g. at a reverse proxy)
+// in a high-traffic production deployment, but meaningfully raises the cost
+// of a brute-force attempt against login/register with zero dependencies.
+const rateBuckets = new Map(); // ip -> [timestamps]
 function rateLimited(req, max = 8, windowMs = 60_000) {
   const ip = req.socket.remoteAddress || 'unknown';
   const now = Date.now();
@@ -178,7 +174,7 @@ function route(method, pattern, handler) {
   routes.push({ method, regex, paramNames, handler });
 }
 
-route('GET', '/api/health', (req, res) => send(res, 200, { ok: true, app: 'RCCG Chapel of Praise', stage: 7, storage: storageConfigured() ? 'configured' : 'not-configured' }));
+route('GET', '/api/health', (req, res) => send(res, 200, { ok: true, app: 'RCCG Chapel of Praise', stage: 7 }));
 
 route('GET', '/api/config', (req, res) => {
   send(res, 200, JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'app-config.json'), 'utf8')));
@@ -189,10 +185,10 @@ route('GET', '/api/rctc', (req, res) => {
 });
 
 // ---- calendar / events (public read; role-filtered) ----
-route('GET', '/api/calendar', async (req, res) => {
-  const user = await currentUser(req);
+route('GET', '/api/calendar', (req, res) => {
+  const user = currentUser(req);
   const role = user ? user.role : 'guest';
-  const db = await readDB();
+  const db = readDB();
   const visible = db.events.filter(e => {
     const aud = e.aud || ['all'];
     return aud.includes('all') || aud.includes(role) || role === 'admin';
@@ -204,26 +200,27 @@ route('PUT', '/api/admin/events/:id', (req, res, p) => handleAdminUpdate(req, re
 route('DELETE', '/api/admin/events/:id', (req, res, p) => handleAdminDelete(req, res, 'events', p.id));
 
 // ---- media / sermons (public read; admin-managed) ----
-route('GET', '/api/media', async (req, res) => {
-  const db = await readDB();
+route('GET', '/api/media', (req, res) => {
+  const db = readDB();
   send(res, 200, { livestreamUrl: db.livestreamUrl || '', items: db.media });
 });
 route('POST', '/api/admin/media', (req, res) => handleAdminCreate(req, res, 'media'));
 route('PUT', '/api/admin/media/:id', (req, res, p) => handleAdminUpdate(req, res, 'media', p.id));
 route('DELETE', '/api/admin/media/:id', (req, res, p) => handleAdminDelete(req, res, 'media', p.id));
 route('PUT', '/api/admin/livestream', async (req, res) => {
-  const admin = await requireAdmin(req, res); if (!admin) return;
+  const admin = requireAdmin(req, res); if (!admin) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
-  const result = await update(db => { db.livestreamUrl = body.url || ''; return db.livestreamUrl; });
+  const result = update(db => { db.livestreamUrl = body.url || ''; return db.livestreamUrl; });
   send(res, 200, { livestreamUrl: result });
 });
 
 // ---- notifications / announcements ----
-route('GET', '/api/notifications', async (req, res) => {
-  const user = await currentUser(req);
+route('GET', '/api/notifications', (req, res) => {
+  const user = currentUser(req);
   const role = user ? user.role : 'guest';
-  const db = await readDB();
+  const db = readDB();
   const visible = db.notifications.filter(n => {
+    if (n.published === false && role !== 'admin') return false;
     const aud = n.aud || ['all'];
     return aud.includes('all') || aud.includes(role) || role === 'admin';
   });
@@ -237,21 +234,21 @@ route('DELETE', '/api/admin/notifications/:id', (req, res, p) => handleAdminDele
 route('GET', '/api/giving/provider-status', (req, res) => {
   send(res, 200, { provider: activeProvider(), configured: !!activeProvider() });
 });
-route('GET', '/api/giving/accounts', async (req, res) => send(res, 200, (await readDB()).givingAccounts));
+route('GET', '/api/giving/accounts', (req, res) => send(res, 200, readDB().givingAccounts));
 route('PUT', '/api/admin/giving-accounts', async (req, res) => {
-  const admin = await requireAdmin(req, res); if (!admin) return;
+  const admin = requireAdmin(req, res); if (!admin) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
-  const result = await update(db => { db.givingAccounts = body; return db.givingAccounts; });
+  const result = update(db => { db.givingAccounts = body; return db.givingAccounts; });
   send(res, 200, result);
 });
 route('POST', '/api/giving/intent', async (req, res) => {
-  const user = await requireAuth(req, res); if (!user) return;
+  const user = requireAuth(req, res); if (!user) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
   const provider = activeProvider();
   const reference = 'giving-' + nextId();
   const category = body?.category || 'Other';
 
-  const record = await update(db => {
+  const record = update(db => {
     const x = {
       id: nextId(), memberId: user.id, type: 'Giving Intent', category, reference,
       amountNaira: body?.amountNaira || null, createdAt: new Date().toISOString(),
@@ -279,12 +276,16 @@ route('POST', '/api/giving/intent', async (req, res) => {
   });
 
   if (!session.ok) {
-    await update(db => { const r = db.requests.find(x => x.id === record.id); if (r) r.status = 'payment-init-failed'; return db; });
+    update(db => { const r = db.requests.find(x => x.id === record.id); if (r) r.status = 'payment-init-failed'; return db; });
     return send(res, 502, { error: session.error });
   }
   send(res, 202, { ok: true, id: record.id, reference, checkoutUrl: session.authorizationUrl });
 });
 
+// Webhook: the payment provider calls this after a payment completes.
+// We verify the signature AND re-verify the transaction directly with the
+// provider before ever marking a gift as paid — the webhook body itself is
+// never trusted at face value.
 route('POST', '/api/giving/webhook/:provider', async (req, res, p) => {
   let raw = '';
   await new Promise(resolve => { req.on('data', c => raw += c); req.on('end', resolve); });
@@ -297,7 +298,7 @@ route('POST', '/api/giving/webhook/:provider', async (req, res, p) => {
   if (!reference) return send(res, 400, { error: 'Missing reference' });
 
   const verification = await verifyTransaction({ provider, reference });
-  await update(db => {
+  update(db => {
     const r = db.requests.find(x => x.reference === reference);
     if (r) r.status = verification.ok ? 'paid' : 'payment-failed';
     return db;
@@ -306,11 +307,11 @@ route('POST', '/api/giving/webhook/:provider', async (req, res, p) => {
 });
 
 // ---- leadership ----
-route('GET', '/api/leadership', async (req, res) => send(res, 200, (await readDB()).leadership));
+route('GET', '/api/leadership', (req, res) => send(res, 200, readDB().leadership));
 route('PUT', '/api/admin/leadership', async (req, res) => {
-  const admin = await requireAdmin(req, res); if (!admin) return;
+  const admin = requireAdmin(req, res); if (!admin) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
-  const result = await update(db => { db.leadership = body; return db.leadership; });
+  const result = update(db => { db.leadership = body; return db.leadership; });
   send(res, 200, result);
 });
 
@@ -322,12 +323,12 @@ route('POST', '/api/auth/register', async (req, res) => {
   if (!name || !isValidEmail(email) || !password || password.length < 8) {
     return send(res, 400, { error: 'Name, a valid email, and a password of at least 8 characters are required.' });
   }
-  const db = await readDB();
+  const db = readDB();
   if (db.users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
     return send(res, 409, { error: 'An account with this email already exists.' });
   }
   const { salt, hash } = hashPassword(password);
-  const user = await update(db2 => {
+  const user = update(db2 => {
     const u = { id: nextId(), name, email, salt, hash, role: 'member', createdAt: new Date().toISOString() };
     db2.users.push(u);
     return u;
@@ -340,7 +341,7 @@ route('POST', '/api/auth/login', async (req, res) => {
   if (rateLimited(req)) return send(res, 429, { error: 'Too many attempts. Please wait a minute and try again.' });
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
   const { email, password } = body || {};
-  const db = await readDB();
+  const db = readDB();
   const user = db.users.find(u => u.email.toLowerCase() === (email || '').toLowerCase());
   if (!user || !verifyPassword(password || '', user.salt, user.hash)) {
     return send(res, 401, { error: 'Incorrect email or password.' });
@@ -349,35 +350,34 @@ route('POST', '/api/auth/login', async (req, res) => {
   send(res, 200, { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 });
 
-route('GET', '/api/auth/me', async (req, res) => {
-  const user = await requireAuth(req, res); if (!user) return;
+route('GET', '/api/auth/me', (req, res) => {
+  const user = requireAuth(req, res); if (!user) return;
   send(res, 200, { user });
 });
 
 // ---- member: reminders ----
 route('POST', '/api/reminders', async (req, res) => {
-  const user = await requireAuth(req, res); if (!user) return;
+  const user = requireAuth(req, res); if (!user) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
   if (!body.eventId) return send(res, 400, { error: 'eventId is required' });
-  const rec = await update(db => {
+  const rec = update(db => {
     const x = { id: nextId(), memberId: user.id, eventId: body.eventId, createdAt: new Date().toISOString() };
     db.reminders.push(x);
     return x;
   });
   send(res, 201, rec);
 });
-route('GET', '/api/reminders', async (req, res) => {
-  const user = await requireAuth(req, res); if (!user) return;
-  const db = await readDB();
-  send(res, 200, db.reminders.filter(r => r.memberId === user.id));
+route('GET', '/api/reminders', (req, res) => {
+  const user = requireAuth(req, res); if (!user) return;
+  send(res, 200, readDB().reminders.filter(r => r.memberId === user.id));
 });
 
 // ---- member: prayer / service requests ----
 route('POST', '/api/requests', async (req, res) => {
-  const user = await requireAuth(req, res); if (!user) return;
+  const user = requireAuth(req, res); if (!user) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
   if (!body.type || !body.message) return send(res, 400, { error: 'type and message are required' });
-  const rec = await update(db => {
+  const rec = update(db => {
     const x = {
       id: nextId(), memberId: user.id, type: body.type, message: body.message,
       private: !!body.private, status: 'received', createdAt: new Date().toISOString()
@@ -387,23 +387,21 @@ route('POST', '/api/requests', async (req, res) => {
   });
   send(res, 201, rec);
 });
-route('GET', '/api/requests', async (req, res) => {
-  const user = await requireAuth(req, res); if (!user) return;
-  const db = await readDB();
-  send(res, 200, db.requests.filter(r => r.memberId === user.id));
+route('GET', '/api/requests', (req, res) => {
+  const user = requireAuth(req, res); if (!user) return;
+  send(res, 200, readDB().requests.filter(r => r.memberId === user.id));
 });
 
 // ---- admin: users, requests ----
-route('GET', '/api/admin/users', async (req, res) => {
-  const admin = await requireAdmin(req, res); if (!admin) return;
-  const db = await readDB();
-  send(res, 200, db.users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt })));
+route('GET', '/api/admin/users', (req, res) => {
+  const admin = requireAdmin(req, res); if (!admin) return;
+  send(res, 200, readDB().users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt })));
 });
 route('PATCH', '/api/admin/users/:id', async (req, res, p) => {
-  const admin = await requireAdmin(req, res); if (!admin) return;
+  const admin = requireAdmin(req, res); if (!admin) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
   if (body.role && !ROLES.includes(body.role)) return send(res, 400, { error: 'Invalid role. Must be one of: ' + ROLES.join(', ') });
-  const result = await update(db => {
+  const result = update(db => {
     const u = db.users.find(x => x.id === p.id);
     if (!u) return null;
     if (body.role) u.role = body.role;
@@ -412,15 +410,14 @@ route('PATCH', '/api/admin/users/:id', async (req, res, p) => {
   if (!result) return send(res, 404, { error: 'User not found' });
   send(res, 200, result);
 });
-route('GET', '/api/admin/requests', async (req, res) => {
-  const admin = await requireAdmin(req, res); if (!admin) return;
-  const db = await readDB();
-  send(res, 200, db.requests);
+route('GET', '/api/admin/requests', (req, res) => {
+  const admin = requireAdmin(req, res); if (!admin) return;
+  send(res, 200, readDB().requests);
 });
 route('PATCH', '/api/admin/requests/:id', async (req, res, p) => {
-  const admin = await requireAdmin(req, res); if (!admin) return;
+  const admin = requireAdmin(req, res); if (!admin) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
-  const result = await update(db => {
+  const result = update(db => {
     const r = db.requests.find(x => x.id === p.id);
     if (!r) return null;
     if (body.status) r.status = body.status;
@@ -432,9 +429,9 @@ route('PATCH', '/api/admin/requests/:id', async (req, res, p) => {
 
 // ---- generic admin create/update/delete for simple collections ----
 async function handleAdminCreate(req, res, collection) {
-  const admin = await requireAdmin(req, res); if (!admin) return;
+  const admin = requireAdmin(req, res); if (!admin) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
-  const rec = await update(db => {
+  const rec = update(db => {
     const x = { id: nextId(), ...body, createdAt: new Date().toISOString() };
     db[collection].push(x);
     return x;
@@ -442,9 +439,9 @@ async function handleAdminCreate(req, res, collection) {
   send(res, 201, rec);
 }
 async function handleAdminUpdate(req, res, collection, id) {
-  const admin = await requireAdmin(req, res); if (!admin) return;
+  const admin = requireAdmin(req, res); if (!admin) return;
   let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
-  const result = await update(db => {
+  const result = update(db => {
     const idx = db[collection].findIndex(x => x.id === id);
     if (idx === -1) return null;
     db[collection][idx] = { ...db[collection][idx], ...body, id };
@@ -454,8 +451,8 @@ async function handleAdminUpdate(req, res, collection, id) {
   send(res, 200, result);
 }
 async function handleAdminDelete(req, res, collection, id) {
-  const admin = await requireAdmin(req, res); if (!admin) return;
-  const result = await update(db => {
+  const admin = requireAdmin(req, res); if (!admin) return;
+  const result = update(db => {
     const before = db[collection].length;
     db[collection] = db[collection].filter(x => x.id !== id);
     return db[collection].length < before;
@@ -501,7 +498,7 @@ const server = http.createServer(async (req, res) => {
         await r.handler(req, res, params);
       } catch (err) {
         console.error('Handler error:', err);
-        if (!res.headersSent) send(res, 500, { error: 'Internal server error' });
+        send(res, 500, { error: 'Internal server error' });
       }
       return;
     }
@@ -516,11 +513,5 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-bootstrap()
-  .then(() => server.listen(PORT, () => console.log('Chapel of Praise server running on port', PORT)))
-  .catch(err => {
-    console.error('Bootstrap failed:', err);
-    // Still start the server so /api/health can report the problem rather
-    // than the whole process silently failing to come up.
-    server.listen(PORT, () => console.log('Chapel of Praise server running on port', PORT, '(bootstrap had errors — see above)'));
-  });
+bootstrap();
+server.listen(PORT, () => console.log('Chapel of Praise server running on port', PORT));

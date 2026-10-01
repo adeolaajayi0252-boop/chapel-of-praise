@@ -72,18 +72,22 @@ async function loadSession() {
 }
 
 async function loadPublicData() {
-  const [calendar, media, leadership, notifications, givingAccounts] = await Promise.all([
+  const [calendar, media, leadership, notifications, givingAccounts, rctc, homepage] = await Promise.all([
     api('/calendar').catch(() => []),
     api('/media').catch(() => ({ livestreamUrl: '', items: [] })),
     api('/leadership').catch(() => []),
     api('/notifications').catch(() => []),
-    api('/giving/accounts').catch(() => null)
+    api('/giving/accounts').catch(() => null),
+    api('/rctc').catch(() => null),
+    api('/homepage').catch(() => null)
   ]);
   state.calendar = calendar;
   state.media = media;
   state.leadership = leadership;
   state.notifications = notifications;
   state.givingAccounts = givingAccounts;
+  state.rctc = rctc;
+  state.homepage = homepage;
 }
 
 async function loadMemberData() {
@@ -142,8 +146,9 @@ function formatCountdown(ms){ms=Math.max(0,ms);const sec=Math.floor(ms/1000);ret
 function updateCountdown(target){const draw=()=>{const c=document.querySelector('#countdown');if(!c)return;const t=formatCountdown(target-new Date());c.innerHTML=[['days','Days'],['hours','Hours'],['mins','Mins'],['secs','Secs']].map(([k,l])=>`<div class="time-box"><strong>${String(t[k]).padStart(2,'0')}</strong><span>${l}</span></div>`).join('');};draw();clearInterval(window.copCountdown);window.copCountdown=setInterval(draw,1000);}
 function home(){
  const notices=state.notifications||[],next=getNextService(),notice=notices[0];
+ const hp=state.homepage||{eyebrow:'Chapel of Praise · Ibadan',title:'Together in Worship',titleEmphasis:'Together in His Presence',subtitle:'A place to belong, grow and make a difference.'};
  app.innerHTML=`<div class="wrap">
-  <section class="hero hero-home"><div class="eyebrow">Chapel of Praise · Ibadan</div><h1>Together in Worship<em>Together in His Presence</em></h1><p>A place to belong, grow and make a difference.</p><img src="assets/church.jpg" alt="Chapel of Praise"><div class="hero-dots"><span class="active"></span><span></span><span></span></div></section>
+  <section class="hero hero-home"><div class="eyebrow">${esc(hp.eyebrow)}</div><h1>${esc(hp.title)}<em>${esc(hp.titleEmphasis)}</em></h1><p>${esc(hp.subtitle)}</p><img src="assets/church.jpg" alt="Chapel of Praise"><div class="hero-dots"><span class="active"></span><span></span><span></span></div></section>
   <section class="next-service"><div class="next-service-head"><div class="service-icon">▣</div><div><h3>Next Service</h3><p>${esc(next.title)} · Worship · Word · Fellowship</p></div><div class="arrow">›</div></div><div class="countdown" id="countdown"></div></section>
   <div class="quick-grid"><button class="quick" onclick="setTab('connect')"><span class="quick-icon">♧</span><small>Prayer</small></button><button class="quick" onclick="setTab('media')"><span class="quick-icon">▶</span><small>Sermons</small></button><button class="quick" onclick="toast('Bible resources will appear here as they are connected.')"><span class="quick-icon">▤</span><small>Bible</small></button><button class="quick" onclick="startGiving()"><span class="quick-icon">♥</span><small>Giving</small></button></div>
   <div class="section-head"><h2>Announcements</h2><button onclick="setTab('connect')">See all</button></div>
@@ -214,7 +219,10 @@ async function enablePush() {
 }
 
 // ---------- RCTC ----------
-function college(){const collegeUrl='https://www.rcbc.edu.ng/';app.innerHTML=`<div class="wrap"><div class="page-title"><button class="back" onclick="setTab('profile')">‹</button><h1>RCTC</h1></div><section class="card rctc-card"><img class="rctc-logo" src="assets/rctc-logo.jpg" alt="The Redeemed Christian Bible College logo"><div><span class="pill">Official college portal</span><h3>The Redeemed Christian Theological College</h3><p class="muted">Formerly Redeemed Christian Bible College (RCBC).</p></div></section><section class="hero" style="margin-top:13px"><div class="eyebrow">Bible College</div><h1 style="font-size:29px">Grow in the Word</h1><p>Connect to the official RCTC portal for programmes, admissions, applications and college information.</p><a class="primary" style="display:inline-block;text-decoration:none" target="_blank" rel="noopener" href="${collegeUrl}">Open Official RCTC Portal</a></section><div class="grid">${card('What you can access',`<p class="muted">Schools and programmes · Theology and pastoral ministry · Admissions and applications · Official college information.</p>`)}${card('Content ownership',`<p class="muted">College information is externally sourced. Chapel of Praise administrators do not maintain RCTC academic content inside the church CMS.</p>`)}</div></div>`;}
+function college(){
+  const r=state.rctc||{name:'The Redeemed Christian Theological College (RCTC)',formerName:'Redeemed Christian Bible College (RCBC)',officialUrl:'https://www.rcbc.edu.ng/',description:'Formerly Redeemed Christian Bible College (RCBC).'};
+  app.innerHTML=`<div class="wrap"><div class="page-title"><button class="back" onclick="setTab('profile')">‹</button><h1>RCTC</h1></div><section class="card rctc-card"><img class="rctc-logo" src="assets/rctc-logo.jpg" alt="The Redeemed Christian Bible College logo"><div><span class="pill">Official college portal</span><h3>${esc(r.name)}</h3><p class="muted">${esc(r.description||('Formerly '+r.formerName+'.'))}</p></div></section><section class="hero" style="margin-top:13px"><div class="eyebrow">Bible College</div><h1 style="font-size:29px">Grow in the Word</h1><p>Connect to the official RCTC portal for programmes, admissions, applications and college information.</p><a class="primary" style="display:inline-block;text-decoration:none" target="_blank" rel="noopener" href="${esc(r.officialUrl)}">Open Official RCTC Portal</a></section><div class="grid">${card('What you can access',`<p class="muted">Schools and programmes · Theology and pastoral ministry · Admissions and applications · Official college information.</p>`)}${card('Content ownership',`<p class="muted">College information is externally sourced. Chapel of Praise administrators do not maintain RCTC academic content inside the church CMS.</p>`)}</div></div>`;
+}
 
 // ---------- Profile ----------
 function profile(){app.innerHTML=`<div class="wrap"><div class="page-title"><h1>More</h1></div><div class="more-list"><button class="more-item" onclick="${state.user?"toast('Profile details are shown below.')":"openAuth('login')"}"><span class="mi">♙</span><span><b>My Profile</b><small>${state.user?esc(state.user.name):'Sign in and manage your account'}</small></span><span class="arrow">›</span></button><button class="more-item" onclick="setTab('college')"><span class="mi">▤</span><span><b>RCTC Bible College</b><small>Programmes, admissions and official portal</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Announcements are shown on Home.')"><span class="mi">♢</span><span><b>Announcements</b><small>Latest church news and updates</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Gallery is ready for approved church photos and videos.')"><span class="mi">▧</span><span><b>Gallery</b><small>Photos and videos</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Bible resources will appear here as they are connected.')"><span class="mi">▤</span><span><b>Bible</b><small>Read, study and grow</small></span><span class="arrow">›</span></button><button class="more-item" onclick="startGiving()"><span class="mi">♥</span><span><b>Giving</b><small>Tithe, offering and more</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('App preferences are managed by your device and church configuration.')"><span class="mi">⚙</span><span><b>Settings</b><small>App preferences</small></span><span class="arrow">›</span></button></div>${state.user?`<section class="card" style="margin-top:12px"><h3>Account</h3><p><b>${esc(state.user.name)}</b><br>${esc(state.user.email)}</p><p class="muted">Role: <span class="pill">${esc(state.user.role)}</span></p><button class="ghost" onclick="logout()">Log out</button></section>`:''}</div>`;}
@@ -225,6 +233,7 @@ async function logout() {
   state.requests = [];
   persist();
   if (state.tab === 'admin') state.tab = 'home';
+  await loadPublicData(); // drop back to guest-filtered calendar/notifications
   render();
   toast('Logged out');
 }
@@ -271,6 +280,11 @@ function renderAuthModal() {
       persist();
       closeAuth();
       toast(isLogin ? 'Logged in' : 'Account created');
+      // Re-fetch role-filtered data (calendar/notifications/etc.) now that
+      // we're authenticated — otherwise an admin who loaded the page while
+      // logged out would keep seeing the guest-filtered lists until a
+      // manual page refresh.
+      await loadPublicData();
       await loadMemberData();
       render();
     } catch (e) {
@@ -296,10 +310,64 @@ function adminPage() {
 }
 
 function renderAdminPage() {
+  const hp = state.homepage || {};
+  const r = state.rctc || {};
   app.innerHTML = `<div class="wrap">
     <section class="hero"><div class="eyebrow">Stage 7 · Admin</div><h1>Admin Panel</h1><p>Manage members, requests, sermons, events, notifications and giving accounts.</p></section>
 
-    ${card('Content Management Centre', `<div class="quick-grid"><button class="quick" onclick="toast('Events manager ready for connection')"><span class="quick-icon">▣</span><small>Events</small></button><button class="quick" onclick="toast('Announcements manager ready for connection')"><span class="quick-icon">!</span><small>Announcements</small></button><button class="quick" onclick="toast('Homepage controls ready for connection')"><span class="quick-icon">⌂</span><small>Homepage</small></button><button class="quick" onclick="toast('RCTC controls ready for connection')"><span class="quick-icon">▤</span><small>RCTC</small></button></div>`)}
+    ${card('Content Management Centre', `<div class="quick-grid">
+      <button class="quick" onclick="document.getElementById('admin-events').scrollIntoView({behavior:'smooth'})"><span class="quick-icon">▣</span><small>Events</small></button>
+      <button class="quick" onclick="document.getElementById('admin-announcements').scrollIntoView({behavior:'smooth'})"><span class="quick-icon">!</span><small>Announcements</small></button>
+      <button class="quick" onclick="document.getElementById('admin-homepage').scrollIntoView({behavior:'smooth'})"><span class="quick-icon">⌂</span><small>Homepage</small></button>
+      <button class="quick" onclick="document.getElementById('admin-rctc').scrollIntoView({behavior:'smooth'})"><span class="quick-icon">▤</span><small>RCTC</small></button>
+    </div>`)}
+
+    <div id="admin-events">${card('Events (' + state.calendar.length + ')', `
+      <div class="list">${state.calendar.map(e => `
+        <div class="card row">
+          <div><b>${esc(e.title)}</b><div class="muted">${DAY_NAMES[e.day]} · ${esc(e.start)}–${esc(e.end)}</div></div>
+          <div><button class="ghost" data-action="edit-event" data-id="${esc(e.id)}">Edit</button> <button class="ghost" data-action="delete-event" data-id="${esc(e.id)}">Delete</button></div>
+        </div>`).join('') || '<p class="muted">No events yet.</p>'}</div>
+      <form class="form" id="eventForm" onsubmit="adminSaveEvent(event)" style="margin-top:12px">
+        <input type="hidden" name="id" value="">
+        <input name="title" placeholder="Event title" required>
+        <select name="day">${DAY_NAMES.map((d, i) => `<option value="${i}">${d}</option>`).join('')}</select>
+        <input name="start" type="time" required>
+        <input name="end" type="time" required>
+        <select name="priority"><option value="normal">Normal</option><option value="high">High</option></select>
+        <button class="primary" id="eventFormSubmit">Add Event</button>
+        <button type="button" class="ghost" id="eventFormCancel" onclick="adminCancelEventEdit()" hidden>Cancel edit</button>
+      </form>`)}</div>
+
+    <div id="admin-announcements">${card('Announcements (' + state.notifications.length + ')', `
+      <div class="list">${state.notifications.map(n => `
+        <div class="card row">
+          <div><b>${esc(n.title || 'Announcement')}</b><div class="muted">${esc(n.message || '')}</div></div>
+          <div><button class="ghost" data-action="edit-announcement" data-id="${esc(n.id)}">Edit</button> <button class="ghost" data-action="delete-announcement" data-id="${esc(n.id)}">Delete</button></div>
+        </div>`).join('') || '<p class="muted">No announcements yet.</p>'}</div>
+      <form class="form" id="announcementForm" onsubmit="adminSaveAnnouncement(event)" style="margin-top:12px">
+        <input type="hidden" name="id" value="">
+        <input name="title" placeholder="Announcement title" required>
+        <textarea name="message" rows="3" placeholder="Announcement text" required></textarea>
+        <button class="primary" id="announcementFormSubmit">Add Announcement</button>
+        <button type="button" class="ghost" id="announcementFormCancel" onclick="adminCancelAnnouncementEdit()" hidden>Cancel edit</button>
+      </form>`)}</div>
+
+    <div id="admin-homepage">${card('Homepage hero text', `<form class="form" onsubmit="adminSaveHomepage(event)">
+      <input name="eyebrow" placeholder="Small label above title" value="${esc(hp.eyebrow || '')}">
+      <input name="title" placeholder="Main title" value="${esc(hp.title || '')}" required>
+      <input name="titleEmphasis" placeholder="Emphasised second line" value="${esc(hp.titleEmphasis || '')}">
+      <textarea name="subtitle" rows="2" placeholder="Subtitle text">${esc(hp.subtitle || '')}</textarea>
+      <button class="primary">Save Homepage Text</button>
+    </form>`)}</div>
+
+    <div id="admin-rctc">${card('RCTC settings', `<form class="form" onsubmit="adminSaveRctc(event)">
+      <input name="name" placeholder="College name" value="${esc(r.name || '')}" required>
+      <input name="formerName" placeholder="Former name" value="${esc(r.formerName || '')}">
+      <input name="officialUrl" placeholder="Official portal URL" value="${esc(r.officialUrl || '')}" required>
+      <textarea name="description" rows="2" placeholder="Short description">${esc(r.description || '')}</textarea>
+      <button class="primary">Save RCTC Settings</button>
+    </form>`)}</div>
 
     ${card('Add a sermon / media item', `<form class="form" onsubmit="adminAddMedia(event)">
       <input name="title" placeholder="Title" required>
@@ -381,6 +449,116 @@ async function adminSetGiving(ev) {
   } catch (e) { toast(e.message); }
 }
 
+// ---- Events ----
+let editingEventId = null;
+async function adminSaveEvent(ev) {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  const body = {
+    title: f.get('title'), day: Number(f.get('day')),
+    start: f.get('start'), end: f.get('end'), priority: f.get('priority')
+  };
+  try {
+    if (editingEventId) await api('/admin/events/' + editingEventId, { method: 'PUT', body: JSON.stringify(body) });
+    else await api('/admin/events', { method: 'POST', body: JSON.stringify(body) });
+    toast(editingEventId ? 'Event updated' : 'Event added');
+    editingEventId = null;
+    state.calendar = await api('/calendar');
+    renderAdminPage();
+  } catch (e) { toast(e.message); }
+}
+function adminEditEvent(id) {
+  const e = state.calendar.find(x => x.id === id);
+  if (!e) return;
+  editingEventId = id;
+  const form = document.getElementById('eventForm');
+  form.title.value = e.title; form.day.value = e.day; form.start.value = e.start;
+  form.end.value = e.end; form.priority.value = e.priority || 'normal';
+  document.getElementById('eventFormSubmit').textContent = 'Save Changes';
+  document.getElementById('eventFormCancel').hidden = false;
+  form.scrollIntoView({ behavior: 'smooth' });
+}
+function adminCancelEventEdit() {
+  editingEventId = null;
+  const form = document.getElementById('eventForm');
+  form.reset();
+  document.getElementById('eventFormSubmit').textContent = 'Add Event';
+  document.getElementById('eventFormCancel').hidden = true;
+}
+async function adminDeleteEvent(id) {
+  try {
+    await api('/admin/events/' + id, { method: 'DELETE' });
+    toast('Event deleted');
+    state.calendar = await api('/calendar');
+    renderAdminPage();
+  } catch (e) { toast(e.message); }
+}
+
+// ---- Announcements ----
+let editingAnnouncementId = null;
+async function adminSaveAnnouncement(ev) {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  const body = { title: f.get('title'), message: f.get('message') };
+  try {
+    if (editingAnnouncementId) await api('/admin/notifications/' + editingAnnouncementId, { method: 'PUT', body: JSON.stringify(body) });
+    else await api('/admin/notifications', { method: 'POST', body: JSON.stringify(body) });
+    toast(editingAnnouncementId ? 'Announcement updated' : 'Announcement added');
+    editingAnnouncementId = null;
+    state.notifications = await api('/notifications');
+    renderAdminPage();
+  } catch (e) { toast(e.message); }
+}
+function adminEditAnnouncement(id) {
+  const n = state.notifications.find(x => x.id === id);
+  if (!n) return;
+  editingAnnouncementId = id;
+  const form = document.getElementById('announcementForm');
+  form.title.value = n.title || ''; form.message.value = n.message || '';
+  document.getElementById('announcementFormSubmit').textContent = 'Save Changes';
+  document.getElementById('announcementFormCancel').hidden = false;
+  form.scrollIntoView({ behavior: 'smooth' });
+}
+function adminCancelAnnouncementEdit() {
+  editingAnnouncementId = null;
+  const form = document.getElementById('announcementForm');
+  form.reset();
+  document.getElementById('announcementFormSubmit').textContent = 'Add Announcement';
+  document.getElementById('announcementFormCancel').hidden = true;
+}
+async function adminDeleteAnnouncement(id) {
+  try {
+    await api('/admin/notifications/' + id, { method: 'DELETE' });
+    toast('Announcement deleted');
+    state.notifications = await api('/notifications');
+    renderAdminPage();
+  } catch (e) { toast(e.message); }
+}
+
+// ---- Homepage / RCTC ----
+async function adminSaveHomepage(ev) {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  try {
+    state.homepage = await api('/admin/homepage', {
+      method: 'PUT',
+      body: JSON.stringify({ eyebrow: f.get('eyebrow'), title: f.get('title'), titleEmphasis: f.get('titleEmphasis'), subtitle: f.get('subtitle') })
+    });
+    toast('Homepage text saved');
+  } catch (e) { toast(e.message); }
+}
+async function adminSaveRctc(ev) {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  try {
+    state.rctc = await api('/admin/rctc', {
+      method: 'PUT',
+      body: JSON.stringify({ name: f.get('name'), formerName: f.get('formerName'), officialUrl: f.get('officialUrl'), description: f.get('description') })
+    });
+    toast('RCTC settings saved');
+  } catch (e) { toast(e.message); }
+}
+
 async function adminSetRole(userId, role) {
   try {
     await api('/admin/users/' + userId, { method: 'PATCH', body: JSON.stringify({ role }) });
@@ -415,6 +593,10 @@ app.addEventListener('click', (ev) => {
   if (action === 'remind') remind(el.dataset.id);
   else if (action === 'play-media') { if (el.dataset.url) window.open(el.dataset.url, '_blank'); else toast('This sermon does not have a recording URL yet.'); }
   else if (action === 'save-media') saveMedia(el.dataset.id);
+  else if (action === 'edit-event') adminEditEvent(el.dataset.id);
+  else if (action === 'delete-event') { if (confirm('Delete this event?')) adminDeleteEvent(el.dataset.id); }
+  else if (action === 'edit-announcement') adminEditAnnouncement(el.dataset.id);
+  else if (action === 'delete-announcement') { if (confirm('Delete this announcement?')) adminDeleteAnnouncement(el.dataset.id); }
 });
 app.addEventListener('change', (ev) => {
   const el = ev.target.closest('[data-action]');

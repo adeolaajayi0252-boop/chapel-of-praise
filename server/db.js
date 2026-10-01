@@ -63,6 +63,18 @@ function defaultData() {
       parishPastor: 'Aderemi Ajayi',
       deacons: 'TBI',
       workers: 'TBI'
+    },
+    homepage: {
+      eyebrow: 'Chapel of Praise · Ibadan',
+      title: 'Together in Worship',
+      titleEmphasis: 'Together in His Presence',
+      subtitle: 'A place to belong, grow and make a difference.'
+    },
+    rctc: {
+      name: 'The Redeemed Christian Theological College (RCTC)',
+      formerName: 'Redeemed Christian Bible College (RCBC)',
+      officialUrl: 'https://www.rcbc.edu.ng/',
+      description: 'Formerly Redeemed Christian Bible College (RCBC).'
     }
   };
 }

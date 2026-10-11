@@ -377,6 +377,41 @@ route('GET', '/api/auth/me', async (req, res) => {
   send(res, 200, { user });
 });
 
+// Lets a signed-in user update their own display name and/or password.
+// Changing the password requires the current password — this route never
+// lets anyone (including an admin acting on someone else's behalf) set a
+// new password without proving they know the old one.
+route('PATCH', '/api/auth/me', async (req, res) => {
+  const authUser = await requireAuth(req, res); if (!authUser) return;
+  let body; try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }); }
+
+  const result = await update(db => {
+    const u = db.users.find(x => x.id === authUser.id);
+    if (!u) return { error: 'User not found', status: 404 };
+
+    if (body.name !== undefined) {
+      if (!body.name || !body.name.trim()) return { error: 'Name cannot be empty', status: 400 };
+      u.name = body.name.trim();
+    }
+
+    if (body.newPassword !== undefined) {
+      if (!body.currentPassword || !verifyPassword(body.currentPassword, u.salt, u.hash)) {
+        return { error: 'Current password is incorrect', status: 401 };
+      }
+      if (!body.newPassword || body.newPassword.length < 8) {
+        return { error: 'New password must be at least 8 characters', status: 400 };
+      }
+      const { salt, hash } = hashPassword(body.newPassword);
+      u.salt = salt; u.hash = hash;
+    }
+
+    return { user: { id: u.id, name: u.name, email: u.email, role: u.role } };
+  });
+
+  if (result.error) return send(res, result.status, { error: result.error });
+  send(res, 200, result);
+});
+
 // ---- member: reminders ----
 route('POST', '/api/reminders', async (req, res) => {
   const user = await requireAuth(req, res); if (!user) return;

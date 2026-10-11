@@ -68,7 +68,8 @@ function defaultData() {
       eyebrow: 'Chapel of Praise · Ibadan',
       title: 'Together in Worship',
       titleEmphasis: 'Together in His Presence',
-      subtitle: 'A place to belong, grow and make a difference.'
+      subtitle: 'A place to belong, grow and make a difference.',
+      heroImageUrl: ''
     },
     rctc: {
       name: 'The Redeemed Christian Theological College (RCTC)',

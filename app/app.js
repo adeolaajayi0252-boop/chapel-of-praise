@@ -17,7 +17,8 @@ const state = {
   requests: [],
   saved: JSON.parse(localStorage.copSaved || '[]'),
   authOpen: false,
-  authMode: 'login'      // 'login' | 'register'
+  authMode: 'login',      // 'login' | 'register'
+  theme: localStorage.copTheme || 'light'
 };
 
 const $ = s => document.querySelector(s);
@@ -101,7 +102,7 @@ function nav() {
 }
 
 const PAGES = {
-  home, calendar: calendarPage, mediaPage, connect, college, profile, admin: adminPage
+  home, calendar: calendarPage, mediaPage, connect, college, profile, admin: adminPage, settings: settingsPage
 };
 
 function render() {
@@ -130,8 +131,19 @@ function renderNavExtras() {
 
 function setTab(t) {
   if (t === 'admin' && (!state.user || state.user.role !== 'admin')) return;
+  if (t === 'settings' && !state.user) { openAuth('login'); return; }
   state.tab = t;
   persist();
+  render();
+}
+
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', state.theme);
+}
+function toggleTheme() {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  localStorage.copTheme = state.theme;
+  applyTheme();
   render();
 }
 
@@ -148,7 +160,7 @@ function home(){
  const notices=state.notifications||[],next=getNextService(),notice=notices[0];
  const hp=state.homepage||{eyebrow:'Chapel of Praise · Ibadan',title:'Together in Worship',titleEmphasis:'Together in His Presence',subtitle:'A place to belong, grow and make a difference.'};
  app.innerHTML=`<div class="wrap">
-  <section class="hero hero-home"><div class="eyebrow">${esc(hp.eyebrow)}</div><h1>${esc(hp.title)}<em>${esc(hp.titleEmphasis)}</em></h1><p>${esc(hp.subtitle)}</p><img src="assets/church.jpg" alt="Chapel of Praise"><div class="hero-dots"><span class="active"></span><span></span><span></span></div></section>
+  <section class="hero hero-home"><div class="eyebrow">${esc(hp.eyebrow)}</div><h1>${esc(hp.title)}<em>${esc(hp.titleEmphasis)}</em></h1><p>${esc(hp.subtitle)}</p><img src="${esc(hp.heroImageUrl) || 'assets/church.jpg'}" alt="Chapel of Praise" onerror="this.onerror=null;this.src='assets/church.jpg'"><div class="hero-dots"><span class="active"></span><span></span><span></span></div></section>
   <section class="next-service"><div class="next-service-head"><div class="service-icon">▣</div><div><h3>Next Service</h3><p>${esc(next.title)} · Worship · Word · Fellowship</p></div><div class="arrow">›</div></div><div class="countdown" id="countdown"></div></section>
   <div class="quick-grid"><button class="quick" onclick="setTab('connect')"><span class="quick-icon">♧</span><small>Prayer</small></button><button class="quick" onclick="setTab('media')"><span class="quick-icon">▶</span><small>Sermons</small></button><button class="quick" onclick="toast('Bible resources will appear here as they are connected.')"><span class="quick-icon">▤</span><small>Bible</small></button><button class="quick" onclick="startGiving()"><span class="quick-icon">♥</span><small>Giving</small></button></div>
   <div class="section-head"><h2>Announcements</h2><button onclick="setTab('connect')">See all</button></div>
@@ -174,12 +186,23 @@ function connect(){if(!state.user){app.innerHTML=`<div class="wrap"><div class="
 function givingBody() {
   const accts = state.givingAccounts;
   const hasAccounts = accts && Array.isArray(accts.accounts) && accts.accounts.length > 0;
-  return `<p class="muted">Giving categories are configured by the church. Payment credentials are not stored in this app.</p>
-    <select id="givingType"><option>Tithe</option><option>Offering</option><option>Thanksgiving</option><option>Missions</option><option>Building/Project</option><option>Welfare</option><option>Other</option></select>
-    <button class="primary" style="margin-top:10px" onclick="startGiving()">Continue to Giving</button>
-    <div style="margin-top:10px" class="muted">${hasAccounts
-      ? accts.accounts.map(a => `<div>${esc(a.label || 'Account')}: ${esc(a.bank || '')} ${esc(a.number || '')}</div>`).join('')
-      : esc((accts && accts.note) || 'Account details have not been added yet.')}</div>`;
+  return `<p class="muted">Choose where your giving goes. These are two separate destinations — kept intentionally distinct.</p>
+
+    <div class="card" style="margin:10px 0;border-left:4px solid var(--brand)">
+      <h4 style="margin:0 0 4px">RCCG Global Giving</h4>
+      <p class="muted" style="margin:0 0 8px">Tithe, offering, missions and other giving to the Redeemed Christian Church of God mission, via the official RCCG site.</p>
+      <a class="primary" style="display:inline-block;text-decoration:none" target="_blank" rel="noopener" href="https://www.rccg.org/giving">Give to RCCG Global</a>
+    </div>
+
+    <div class="card" style="margin:10px 0;border-left:4px solid var(--brand)">
+      <h4 style="margin:0 0 4px">Chapel of Praise Local Giving</h4>
+      <p class="muted" style="margin:0 0 8px">Offerings, tithes, donations and parish-specific giving for this local congregation (Chapel of Praise, Ibadan).</p>
+      <select id="givingType"><option>Tithe</option><option>Offering</option><option>Thanksgiving</option><option>Missions</option><option>Building/Project</option><option>Welfare</option><option>Other</option></select>
+      <button class="primary" style="margin-top:10px" onclick="startGiving()">Continue to Local Giving</button>
+      <div style="margin-top:10px" class="muted">${hasAccounts
+        ? accts.accounts.map(a => `<div>${esc(a.label || 'Account')}: ${esc(a.bank || '')} ${esc(a.number || '')}</div>`).join('')
+        : esc((accts && accts.note) || 'Account details have not been added yet.')}</div>
+    </div>`;
 }
 
 function requestHistoryBody() {
@@ -225,17 +248,72 @@ function college(){
 }
 
 // ---------- Profile ----------
-function profile(){app.innerHTML=`<div class="wrap"><div class="page-title"><h1>More</h1></div><div class="more-list"><button class="more-item" onclick="${state.user?"toast('Profile details are shown below.')":"openAuth('login')"}"><span class="mi">♙</span><span><b>My Profile</b><small>${state.user?esc(state.user.name):'Sign in and manage your account'}</small></span><span class="arrow">›</span></button><button class="more-item" onclick="setTab('college')"><span class="mi">▤</span><span><b>RCTC Bible College</b><small>Programmes, admissions and official portal</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Announcements are shown on Home.')"><span class="mi">♢</span><span><b>Announcements</b><small>Latest church news and updates</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Gallery is ready for approved church photos and videos.')"><span class="mi">▧</span><span><b>Gallery</b><small>Photos and videos</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Bible resources will appear here as they are connected.')"><span class="mi">▤</span><span><b>Bible</b><small>Read, study and grow</small></span><span class="arrow">›</span></button><button class="more-item" onclick="startGiving()"><span class="mi">♥</span><span><b>Giving</b><small>Tithe, offering and more</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('App preferences are managed by your device and church configuration.')"><span class="mi">⚙</span><span><b>Settings</b><small>App preferences</small></span><span class="arrow">›</span></button></div>${state.user?`<section class="card" style="margin-top:12px"><h3>Account</h3><p><b>${esc(state.user.name)}</b><br>${esc(state.user.email)}</p><p class="muted">Role: <span class="pill">${esc(state.user.role)}</span></p><button class="ghost" onclick="logout()">Log out</button></section>`:''}</div>`;}
+function profile(){app.innerHTML=`<div class="wrap"><div class="page-title"><h1>More</h1></div><div class="more-list"><button class="more-item" onclick="${state.user?"toast('Profile details are shown below.')":"openAuth('login')"}"><span class="mi">♙</span><span><b>My Profile</b><small>${state.user?esc(state.user.name):'Sign in and manage your account'}</small></span><span class="arrow">›</span></button><button class="more-item" onclick="setTab('college')"><span class="mi">▤</span><span><b>RCTC Bible College</b><small>Programmes, admissions and official portal</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Announcements are shown on Home.')"><span class="mi">♢</span><span><b>Announcements</b><small>Latest church news and updates</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Gallery is ready for approved church photos and videos.')"><span class="mi">▧</span><span><b>Gallery</b><small>Photos and videos</small></span><span class="arrow">›</span></button><button class="more-item" onclick="toast('Bible resources will appear here as they are connected.')"><span class="mi">▤</span><span><b>Bible</b><small>Read, study and grow</small></span><span class="arrow">›</span></button><button class="more-item" onclick="startGiving()"><span class="mi">♥</span><span><b>Giving</b><small>Tithe, offering and more</small></span><span class="arrow">›</span></button><button class="more-item" onclick="setTab('settings')"><span class="mi">⚙</span><span><b>Settings</b><small>App preferences</small></span><span class="arrow">›</span></button></div>${state.user?`<section class="card" style="margin-top:12px"><h3>Account</h3><p><b>${esc(state.user.name)}</b><br>${esc(state.user.email)}</p><p class="muted">Role: <span class="pill">${esc(state.user.role)}</span></p><button class="ghost" onclick="logout()">Log out</button></section>`:''}</div>`;}
 
 async function logout() {
   state.token = null;
   state.user = null;
   state.requests = [];
   persist();
-  if (state.tab === 'admin') state.tab = 'home';
+  if (state.tab === 'admin' || state.tab === 'settings') state.tab = 'home';
   await loadPublicData(); // drop back to guest-filtered calendar/notifications
   render();
   toast('Logged out');
+}
+
+// ---------- Settings (member preferences) ----------
+function settingsPage() {
+  if (!state.user) { openAuth('login'); return; }
+  const notifPermission = ('Notification' in window) ? Notification.permission : 'unsupported';
+  app.innerHTML = `<div class="wrap">
+    <section class="hero"><div class="eyebrow">Preferences</div><h1>Settings</h1><p>These apply to your account on this device.</p><button class="ghost" onclick="setTab('profile')">‹ Back to Profile</button></section>
+
+    ${card('Display name', `<form class="form" onsubmit="saveDisplayName(event)">
+      <input name="name" value="${esc(state.user.name)}" required>
+      <button class="primary">Save Name</button>
+    </form>`)}
+
+    ${card('Change password', `<form class="form" onsubmit="changePassword(event)">
+      <input name="currentPassword" type="password" placeholder="Current password" required>
+      <input name="newPassword" type="password" placeholder="New password (min 8 characters)" minlength="8" required>
+      <button class="primary">Change Password</button>
+    </form>`)}
+
+    ${card('Notifications', `<p class="muted">Browser notification permission: <b>${esc(notifPermission)}</b></p>
+      ${notifPermission === 'granted'
+        ? '<p class="muted">Notifications are enabled on this device.</p>'
+        : `<button class="ghost" onclick="enablePush()">Enable Notifications</button>`}`)}
+
+    ${card('Appearance', `<p class="muted">Current theme: <b>${state.theme === 'dark' ? 'Dark' : 'Light'}</b></p>
+      <button class="ghost" onclick="toggleTheme()">Switch to ${state.theme === 'dark' ? 'Light' : 'Dark'} Mode</button>`)}
+
+    ${card('Account', `<button class="ghost" onclick="logout()">Log out</button>`)}
+  </div>`;
+}
+
+async function saveDisplayName(ev) {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  try {
+    const res = await api('/auth/me', { method: 'PATCH', body: JSON.stringify({ name: f.get('name') }) });
+    state.user.name = res.user.name;
+    persist();
+    toast('Name updated');
+    render();
+  } catch (e) { toast(e.message); }
+}
+
+async function changePassword(ev) {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  try {
+    await api('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword: f.get('currentPassword'), newPassword: f.get('newPassword') })
+    });
+    toast('Password changed');
+    ev.target.reset();
+  } catch (e) { toast(e.message); }
 }
 
 // ---------- Auth modal ----------
@@ -358,6 +436,8 @@ function renderAdminPage() {
       <input name="title" placeholder="Main title" value="${esc(hp.title || '')}" required>
       <input name="titleEmphasis" placeholder="Emphasised second line" value="${esc(hp.titleEmphasis || '')}">
       <textarea name="subtitle" rows="2" placeholder="Subtitle text">${esc(hp.subtitle || '')}</textarea>
+      <input name="heroImageUrl" placeholder="Hero image URL (leave blank to use the default photo)" value="${esc(hp.heroImageUrl || '')}">
+      <p class="muted" style="font-size:12px">Paste a direct image link here (e.g. one you host or generate elsewhere). Leave blank to keep the default church photo.</p>
       <button class="primary">Save Homepage Text</button>
     </form>`)}</div>
 
@@ -542,7 +622,7 @@ async function adminSaveHomepage(ev) {
   try {
     state.homepage = await api('/admin/homepage', {
       method: 'PUT',
-      body: JSON.stringify({ eyebrow: f.get('eyebrow'), title: f.get('title'), titleEmphasis: f.get('titleEmphasis'), subtitle: f.get('subtitle') })
+      body: JSON.stringify({ eyebrow: f.get('eyebrow'), title: f.get('title'), titleEmphasis: f.get('titleEmphasis'), subtitle: f.get('subtitle'), heroImageUrl: f.get('heroImageUrl') })
     });
     toast('Homepage text saved');
   } catch (e) { toast(e.message); }
@@ -622,6 +702,7 @@ $('#installBtn').onclick = async () => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 (async function boot() {
+  applyTheme();
   app.innerHTML = '<div class="wrap"><p class="muted">Loading…</p></div>';
   await loadSession();
   await loadPublicData();
